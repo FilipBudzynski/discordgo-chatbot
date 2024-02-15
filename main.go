@@ -44,6 +44,8 @@ func main() {
 
 	dg.AddHandler(handleMessage)
 
+	dg.AddHandler(ready)
+
 	err = dg.Open()
 	if err != nil {
 		fmt.Println("error opening connection,", err)
@@ -72,12 +74,13 @@ func handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	commandID := commands.ParseCommand(m.Content)
+	args := strings.Fields(m.Content)
+
+	commandID := commands.ParseCommand(args[0])
 	command := commands.Command{
 		CommandID: commandID,
-		AuthorID:  m.Author.ID,
-		GuildID:   m.GuildID,
-		ChannelID: m.ChannelID,
+		Args:      args,
+		Message:   m,
 	}
 
 	commandChan <- command
@@ -96,4 +99,9 @@ func UserInVoiceChannel(s *discordgo.Session, guildID, userID string) (result bo
 		fmt.Println("User not in channel")
 		return false, nil
 	}
+}
+
+func ready(s *discordgo.Session, event *discordgo.Ready) {
+	// Set the playing status.
+	s.UpdateGameStatus(0, "!play")
 }
