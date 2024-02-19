@@ -39,7 +39,7 @@ func ParseCommand(content string) CommandID {
 func CommandHandler(s *discordgo.Session, commandChan <-chan Command) {
 	for c := range commandChan {
 		GuildID := c.Message.GuildID
-		UserID := c.Message.Author.ID
+		AuthorID := c.Message.Author.ID
 
 		switch c.CommandID {
 		case PingCommandID:
@@ -48,12 +48,23 @@ func CommandHandler(s *discordgo.Session, commandChan <-chan Command) {
 				fmt.Println("Error with SendPong command", err)
 			}
 		case PlayCommandID:
-			vs, err := s.State.VoiceState(GuildID, UserID)
+			youtubeURL := c.Args[1]
+
+			vs, err := s.State.VoiceState(GuildID, AuthorID)
 			if err != nil {
 				fmt.Println("Could not find the VoiceState", err)
 				return
 			}
-			PlayLink(s, c.Args[1], GuildID, UserID, vs.ChannelID)
+
+			vi := VoiceInstance{
+				Session:        s,
+				VoiceState:     vs,
+				GuildID:        GuildID,
+				VoiceChannelID: vs.ChannelID,
+				AuthorID:       AuthorID,
+			}
+
+			vi.PlayLink(youtubeURL)
 		default:
 			err := sendUnknownCommand(s, c.Message.ChannelID)
 			if err != nil {
