@@ -1,14 +1,18 @@
 package commands
 
 import (
+	"discord_go_chat/audio"
 	"fmt"
-	"io"
 	"log"
 	"os/exec"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/jonas747/dca"
+)
+
+var (
+	pause  = make(chan bool)
+	resume = make(chan bool)
 )
 
 // TODO: now the voice instance is repsponsible for both playing sounds and also generating url
@@ -23,9 +27,10 @@ type VoiceInstance struct {
 	GuildID         string
 	VoiceChannelID  string
 	AuthorID        string
+	PlaybackState   *audio.PlaybackState
+	// Queue           chan string
 }
 
-// Connects to voiceChannel specified in VoiceInstance,
 // establishes voiceConnection and plays song from provided URL
 func (v *VoiceInstance) PlayLink(youtubeURL string) {
 	// TODO: check if bot needs to be connected to the channel or is already connected
@@ -47,67 +52,59 @@ func (v *VoiceInstance) PlayLink(youtubeURL string) {
 func (v *VoiceInstance) sendOpusAudio(url string) error {
 	time.Sleep(250 * time.Millisecond)
 
-	v.VoiceConnection.Speaking(true)
-
-	err := v.streamDCA(url)
+	err := v.VoiceConnection.Speaking(true)
 	if err != nil {
-		log.Println("Failed to stream audio:", err)
+		log.Fatal("Faild setting speaking to true", err)
 	}
 
-	v.VoiceConnection.Speaking(false)
+	done := make(chan bool)
+	state := audio.NewMutexState()
+	v.PlaybackState = state
 
-	time.Sleep(250 * time.Millisecond)
+	fmt.Println("Audio is playing")
+	audio.PlayAudioFile(v.VoiceConnection, url, done, state)
 
-	return nil
+	select {
+	case <-done:
+		err = v.VoiceConnection.Speaking(false)
+		if err != nil {
+			log.Fatal("Faild setting speaking to false", err)
+		}
+
+		time.Sleep(250 * time.Millisecond)
+
+		return nil
+	}
 }
 
-func (v *VoiceInstance) streamDCA(url string) error {
-	opts := dca.StdEncodeOptions
-	opts.RawOutput = true
-	opts.Bitrate = 96
-	opts.Application = "lowdelay"
+func (v *VoiceInstance) Pause() {
+	v.PlaybackState.Pause()
+}
 
-	encodeSession, err := dca.EncodeFile(url, opts)
-	if err != nil {
-		return fmt.Errorf("failed creating an encoding session: %v", err)
-	}
-
-	done := make(chan error)
-	dca.NewStream(encodeSession, v.VoiceConnection, done)
-
-	for {
-		select {
-		case err := <-done:
-			if err != nil && err != io.EOF {
-				log.Println("FATA: An error occured", err)
-			}
-			// Clean up incase something happened and ffmpeg is still running
-			encodeSession.Cleanup()
-			return nil
-		}
-	}
+func (v *VoiceInstance) Resume() {
+	v.PlaybackState.Resume()
 }
 
 func getAudioURL(videoURL string) (string, error) {
-	// youtubeDownloader, err := exec.LookPath("yt-dlp")
-	// if err != nil {
-	// 	fmt.Println("yt-dlp not found in path")
-	// 	return "", err
-	// }
-	//
-	// args := []string{
-	// 	"--extract-audio",
-	// 	"--audio-format", "best",
-	// 	"--get-url", videoURL,
-	// }
-	//
-	// cmd := exec.Command(youtubeDownloader, args...)
-	cmd := exec.Command("yt-dlp", "--extract-audio", "--audio-format", "best", "--get-url", videoURL)
+	youtubeDownloader, err := exec.LookPath("yt-dlp")
+	if err != nil {
+		fmt.Println("yt-dlp not found in path")
+		return "", err
+	}
+
+	args := []string{
+		"--extract-audio",
+		"--audio-format", "best",
+		"--get-url", videoURL,
+	}
+
+	cmd := exec.Command(youtubeDownloader, args...)
 
 	output, err := cmd.Output()
 	if err != nil {
 		return "", err
 	}
 
+	fmt.Print(string(output))
 	return string(output), nil
 }

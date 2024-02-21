@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -13,14 +14,22 @@ const (
 	PingCommandID CommandID = iota
 	HelpCommandID
 	PlayCommandID
+	PauseCommandID
+	ResumeCommandID
 	UnknownCommandID
 )
 
 type Command struct {
-	CommandID CommandID
-	Args      []string
 	Message   *discordgo.MessageCreate
+	Args      []string
+	CommandID CommandID
 }
+
+// Store voice instances here
+var (
+	voiceInstances     = make(map[string]*VoiceInstance)
+	voiceInstanceMutex sync.Mutex
+)
 
 func ParseCommand(content string) CommandID {
 	switch content {
@@ -30,6 +39,10 @@ func ParseCommand(content string) CommandID {
 		return HelpCommandID
 	case "!play", "!p":
 		return PlayCommandID
+	case "!pause":
+		return PauseCommandID
+	case "!resume":
+		return ResumeCommandID
 	default:
 		return UnknownCommandID
 	}
@@ -38,33 +51,53 @@ func ParseCommand(content string) CommandID {
 // Handles commands based on the commandID
 func CommandHandler(s *discordgo.Session, commandChan <-chan Command) {
 	for c := range commandChan {
-		GuildID := c.Message.GuildID
-		AuthorID := c.Message.Author.ID
+		guildID := c.Message.GuildID
+		authorID := c.Message.Author.ID
+
+		// TODO: in voice related functions, check if the vs is not nil, if nil send message telling user to join the voice channel
+		vs, err := s.State.VoiceState(guildID, authorID)
+		if err != nil {
+			fmt.Println("Could not find the VoiceState", err)
+			return
+		}
 
 		switch c.CommandID {
 		case PingCommandID:
-			err := SendPong(s, c.Message.ChannelID)
-			if err != nil {
-				fmt.Println("Error with SendPong command", err)
-			}
+			go func(channelID string) {
+				err := SendPong(s, channelID)
+				if err != nil {
+					fmt.Println("Error with SendPong command", err)
+				}
+			}(c.Message.ChannelID)
 		case PlayCommandID:
 			youtubeURL := c.Args[1]
-
-			vs, err := s.State.VoiceState(GuildID, AuthorID)
-			if err != nil {
-				fmt.Println("Could not find the VoiceState", err)
-				return
-			}
 
 			vi := VoiceInstance{
 				Session:        s,
 				VoiceState:     vs,
-				GuildID:        GuildID,
+				GuildID:        guildID,
 				VoiceChannelID: vs.ChannelID,
-				AuthorID:       AuthorID,
+				AuthorID:       authorID,
 			}
 
-			vi.PlayLink(youtubeURL)
+			// store voice instance
+			voiceInstanceMutex.Lock()
+			voiceInstances[vs.ChannelID] = &vi
+			voiceInstanceMutex.Unlock()
+
+			go vi.PlayLink(youtubeURL)
+		case PauseCommandID:
+			voiceInstanceMutex.Lock()
+			vi := voiceInstances[vs.ChannelID]
+			voiceInstanceMutex.Unlock()
+
+			go vi.PlaybackState.Pause()
+		case ResumeCommandID:
+			voiceInstanceMutex.Lock()
+			vi := voiceInstances[vs.ChannelID]
+			voiceInstanceMutex.Unlock()
+
+			go vi.PlaybackState.Resume()
 		default:
 			err := sendUnknownCommand(s, c.Message.ChannelID)
 			if err != nil {
