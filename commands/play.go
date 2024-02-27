@@ -10,11 +10,6 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-var (
-	pause  = make(chan bool)
-	resume = make(chan bool)
-)
-
 // TODO: now the voice instance is repsponsible for both playing sounds and also generating url
 // for the song. This needs to be changed to seperate resposibility by creating a song type structure that will
 // have link and some other stuff
@@ -24,11 +19,28 @@ type VoiceInstance struct {
 	Session         *discordgo.Session
 	VoiceConnection *discordgo.VoiceConnection
 	VoiceState      *discordgo.VoiceState
+	PlaybackState   *audio.PlaybackState
 	GuildID         string
 	VoiceChannelID  string
 	AuthorID        string
-	PlaybackState   *audio.PlaybackState
 	// Queue           chan string
+}
+
+func handlePlayCommand(s *discordgo.Session, vs *discordgo.VoiceState, guildID, authorID, ytLink string) {
+	vi := VoiceInstance{
+		Session:        s,
+		VoiceState:     vs,
+		GuildID:        guildID,
+		VoiceChannelID: vs.ChannelID,
+		AuthorID:       authorID,
+	}
+
+	// store voice instance
+	voiceInstanceMutex.Lock()
+	voiceInstances[vs.ChannelID] = &vi
+	voiceInstanceMutex.Unlock()
+
+	vi.PlayLink(ytLink)
 }
 
 // establishes voiceConnection and plays song from provided URL
@@ -42,10 +54,16 @@ func (v *VoiceInstance) PlayLink(youtubeURL string) {
 
 	v.VoiceConnection = vc
 
-	url, _ := getAudioURL(youtubeURL)
-	v.sendOpusAudio(url)
+	url, _ := GetAudioURL(youtubeURL)
+	err = v.sendOpusAudio(url)
+	if err != nil {
+		fmt.Println("Error with sending Opus Audio", err)
+	}
 
-	vc.Disconnect()
+	err = vc.Disconnect()
+	if err != nil {
+		fmt.Println("Error with disconecting from voice channel", err)
+	}
 }
 
 // Function streams sound directly from the link
@@ -71,21 +89,14 @@ func (v *VoiceInstance) sendOpusAudio(url string) error {
 			log.Fatal("Faild setting speaking to false", err)
 		}
 
+		// wait before disconecting
 		time.Sleep(250 * time.Millisecond)
 
 		return nil
 	}
 }
 
-func (v *VoiceInstance) Pause() {
-	v.PlaybackState.Pause()
-}
-
-func (v *VoiceInstance) Resume() {
-	v.PlaybackState.Resume()
-}
-
-func getAudioURL(videoURL string) (string, error) {
+func GetAudioURL(videoURL string) (string, error) {
 	youtubeDownloader, err := exec.LookPath("yt-dlp")
 	if err != nil {
 		fmt.Println("yt-dlp not found in path")
@@ -93,6 +104,9 @@ func getAudioURL(videoURL string) (string, error) {
 	}
 
 	args := []string{
+		"--get-title",
+		"--get-duration",
+		"--get-thumbnail",
 		"--extract-audio",
 		"--audio-format", "best",
 		"--get-url", videoURL,
@@ -107,4 +121,12 @@ func getAudioURL(videoURL string) (string, error) {
 
 	fmt.Print(string(output))
 	return string(output), nil
+}
+
+func (v *VoiceInstance) Pause() {
+	v.PlaybackState.Pause()
+}
+
+func (v *VoiceInstance) Resume() {
+	v.PlaybackState.Resume()
 }

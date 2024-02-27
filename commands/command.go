@@ -64,40 +64,16 @@ func CommandHandler(s *discordgo.Session, commandChan <-chan Command) {
 		switch c.CommandID {
 		case PingCommandID:
 			go func(channelID string) {
-				err := SendPong(s, channelID)
-				if err != nil {
-					fmt.Println("Error with SendPong command", err)
-				}
+				go handlePingCommand(s, channelID)
 			}(c.Message.ChannelID)
 		case PlayCommandID:
-			youtubeURL := c.Args[1]
-
-			vi := VoiceInstance{
-				Session:        s,
-				VoiceState:     vs,
-				GuildID:        guildID,
-				VoiceChannelID: vs.ChannelID,
-				AuthorID:       authorID,
-			}
-
-			// store voice instance
-			voiceInstanceMutex.Lock()
-			voiceInstances[vs.ChannelID] = &vi
-			voiceInstanceMutex.Unlock()
-
-			go vi.PlayLink(youtubeURL)
+			go handlePlayCommand(s, vs, guildID, authorID, c.Args[1])
 		case PauseCommandID:
-			voiceInstanceMutex.Lock()
-			vi := voiceInstances[vs.ChannelID]
-			voiceInstanceMutex.Unlock()
-
-			go vi.PlaybackState.Pause()
+			vi := getVoiceInstancce(vs.ChannelID)
+			go vi.Pause()
 		case ResumeCommandID:
-			voiceInstanceMutex.Lock()
-			vi := voiceInstances[vs.ChannelID]
-			voiceInstanceMutex.Unlock()
-
-			go vi.PlaybackState.Resume()
+			vi := getVoiceInstancce(vs.ChannelID)
+			go vi.Resume()
 		default:
 			err := sendUnknownCommand(s, c.Message.ChannelID)
 			if err != nil {
@@ -105,4 +81,11 @@ func CommandHandler(s *discordgo.Session, commandChan <-chan Command) {
 			}
 		}
 	}
+}
+
+func getVoiceInstancce(voiceChannelID string) *VoiceInstance {
+	voiceInstanceMutex.Lock()
+	vi := voiceInstances[voiceChannelID]
+	voiceInstanceMutex.Unlock()
+	return vi
 }
