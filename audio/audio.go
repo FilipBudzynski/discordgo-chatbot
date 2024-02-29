@@ -23,9 +23,9 @@ import (
 )
 
 type PlaybackState struct {
-	Paused bool
-	mu     sync.Mutex
 	cond   *sync.Cond
+	mu     sync.Mutex
+	Paused bool
 }
 
 func NewMutexState() *PlaybackState {

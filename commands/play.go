@@ -2,131 +2,128 @@ package commands
 
 import (
 	"discord_go_chat/audio"
+	"discord_go_chat/music"
 	"fmt"
-	"log"
-	"os/exec"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
 
-// TODO: now the voice instance is repsponsible for both playing sounds and also generating url
-// for the song. This needs to be changed to seperate resposibility by creating a song type structure that will
-// have link and some other stuff
+var timeOut = 1 * time.Minute
 
 // Type used for creating a voice instance that is responsible for playing sounds/songs on the channel
 type VoiceInstance struct {
 	Session         *discordgo.Session
 	VoiceConnection *discordgo.VoiceConnection
 	VoiceState      *discordgo.VoiceState
+	Queue           chan music.Song
 	PlaybackState   *audio.PlaybackState
+	TimeoutDuration time.Duration
+	IsPlaying       bool
+	TimeoutSignal   chan bool
+	Stop            chan bool
 	GuildID         string
 	VoiceChannelID  string
 	AuthorID        string
-	// Queue           chan string
 }
 
-func handlePlayCommand(s *discordgo.Session, vs *discordgo.VoiceState, guildID, authorID, ytLink string) {
-	vi := VoiceInstance{
-		Session:        s,
-		VoiceState:     vs,
-		GuildID:        guildID,
-		VoiceChannelID: vs.ChannelID,
-		AuthorID:       authorID,
+func NewVoiceInstance(s *discordgo.Session, vs *discordgo.VoiceState, guildID, authorID string) *VoiceInstance {
+	vi := &VoiceInstance{
+		Session:         s,
+		VoiceState:      vs,
+		GuildID:         guildID,
+		VoiceChannelID:  vs.ChannelID,
+		AuthorID:        authorID,
+		TimeoutDuration: timeOut,
+		Queue:           make(chan music.Song),
+	}
+	return vi
+}
+
+func (v *VoiceInstance) init() {
+	go v.processQueue()
+}
+
+// Establishes voiceConnection and plays song from provided URL
+func (v *VoiceInstance) play(youtubeURL string) {
+	v.joinVoiceChannel()
+
+	songData, err := music.GetSongInfo(youtubeURL)
+	if err != nil {
+		fmt.Println("Error with getting info from yt-dlp: ", err)
 	}
 
-	// store voice instance
-	voiceInstanceMutex.Lock()
-	voiceInstances[vs.ChannelID] = &vi
-	voiceInstanceMutex.Unlock()
-
-	vi.PlayLink(ytLink)
+	song := music.NewSong(songData)
+	v.Queue <- song
 }
 
-// establishes voiceConnection and plays song from provided URL
-func (v *VoiceInstance) PlayLink(youtubeURL string) {
-	// TODO: check if bot needs to be connected to the channel or is already connected
+func (v *VoiceInstance) joinVoiceChannel() {
 	vc, err := v.Session.ChannelVoiceJoin(v.GuildID, v.VoiceChannelID, false, false)
 	if err != nil {
 		fmt.Println("Error joining voice channel:", err)
-		return
 	}
 
 	v.VoiceConnection = vc
-
-	url, _ := GetAudioURL(youtubeURL)
-	err = v.sendOpusAudio(url)
-	if err != nil {
-		fmt.Println("Error with sending Opus Audio", err)
-	}
-
-	err = vc.Disconnect()
-	if err != nil {
-		fmt.Println("Error with disconecting from voice channel", err)
-	}
 }
 
-// Function streams sound directly from the link
-func (v *VoiceInstance) sendOpusAudio(url string) error {
-	time.Sleep(250 * time.Millisecond)
+func (v *VoiceInstance) processQueue() {
+	timer := time.NewTimer(v.TimeoutDuration)
+	defer timer.Stop()
 
-	err := v.VoiceConnection.Speaking(true)
-	if err != nil {
-		log.Fatal("Faild setting speaking to true", err)
-	}
+	for {
+		select {
+		case <-timer.C:
+			fmt.Println("Timer expired, disconnecting...")
+			v.Disconnect()
+			return
+		case song, ok := <-v.Queue:
+			if !ok {
+				return
+			}
+			fmt.Println("Processing song:", song)
+			if !timer.Stop() {
+				<-timer.C
+			}
+			timer.Reset(v.TimeoutDuration)
 
-	done := make(chan bool)
-	state := audio.NewMutexState()
-	v.PlaybackState = state
-
-	fmt.Println("Audio is playing")
-	audio.PlayAudioFile(v.VoiceConnection, url, done, state)
-
-	select {
-	case <-done:
-		err = v.VoiceConnection.Speaking(false)
-		if err != nil {
-			log.Fatal("Faild setting speaking to false", err)
+			v.playSong(song)
 		}
-
-		// wait before disconecting
-		time.Sleep(250 * time.Millisecond)
-
-		return nil
 	}
 }
 
-func GetAudioURL(videoURL string) (string, error) {
-	youtubeDownloader, err := exec.LookPath("yt-dlp")
-	if err != nil {
-		fmt.Println("yt-dlp not found in path")
-		return "", err
-	}
+func (v *VoiceInstance) Disconnect() {
+	v.VoiceConnection.Disconnect()
 
-	args := []string{
-		"--get-title",
-		"--get-duration",
-		"--get-thumbnail",
-		"--extract-audio",
-		"--audio-format", "best",
-		"--get-url", videoURL,
-	}
+	voiceInstanceMutex.Lock()
+	defer voiceInstanceMutex.Unlock()
 
-	cmd := exec.Command(youtubeDownloader, args...)
+	delete(voiceInstances, v.VoiceConnection.ChannelID)
+}
 
-	output, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
+func (v *VoiceInstance) playSong(s music.Song) {
+	v.IsPlaying = true
 
-	fmt.Print(string(output))
-	return string(output), nil
+	v.PlaybackState = audio.NewMutexState()
+	audio.PlayAudioFile(v.VoiceConnection, s.URL, v.Stop, v.PlaybackState)
+
+	v.IsPlaying = false
+}
+
+func (v *VoiceInstance) StopPlaying() {
+	v.Stop <- true
 }
 
 func (v *VoiceInstance) Pause() {
+	v.IsPlaying = false
+	v.VoiceConnection.Speaking(false)
 	v.PlaybackState.Pause()
 }
 
 func (v *VoiceInstance) Resume() {
+	v.IsPlaying = true
+	v.VoiceConnection.Speaking(true)
 	v.PlaybackState.Resume()
+}
+
+func (v *VoiceInstance) showQueue() {
 }

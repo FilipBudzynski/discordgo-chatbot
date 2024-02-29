@@ -17,6 +17,7 @@ const (
 	PauseCommandID
 	ResumeCommandID
 	UnknownCommandID
+	QueueCommandID
 )
 
 type Command struct {
@@ -43,6 +44,8 @@ func ParseCommand(content string) CommandID {
 		return PauseCommandID
 	case "!resume":
 		return ResumeCommandID
+	case "!queue", "!q":
+		return QueueCommandID
 	default:
 		return UnknownCommandID
 	}
@@ -64,16 +67,43 @@ func CommandHandler(s *discordgo.Session, commandChan <-chan Command) {
 		switch c.CommandID {
 		case PingCommandID:
 			go func(channelID string) {
-				go handlePingCommand(s, channelID)
+				go HandlePingCommand(s, channelID)
 			}(c.Message.ChannelID)
 		case PlayCommandID:
-			go handlePlayCommand(s, vs, guildID, authorID, c.Args[1])
+			ytLink := c.Args[1]
+			vi := getVoiceInstance(vs.ChannelID)
+			if vi == nil {
+				v := NewVoiceInstance(s, vs, guildID, authorID)
+
+				voiceInstanceMutex.Lock()
+				voiceInstances[vs.ChannelID] = v
+				voiceInstanceMutex.Unlock()
+
+				v.init()
+				vi = v
+			}
+
+			go vi.play(ytLink)
+
 		case PauseCommandID:
-			vi := getVoiceInstancce(vs.ChannelID)
+			vi := getVoiceInstance(vs.ChannelID)
+			if vi == nil {
+				fmt.Println("Voice instance not initiated")
+			}
 			go vi.Pause()
 		case ResumeCommandID:
-			vi := getVoiceInstancce(vs.ChannelID)
+			vi := getVoiceInstance(vs.ChannelID)
+			if vi == nil {
+				fmt.Println("Voice instance not initiated")
+			}
 			go vi.Resume()
+		case QueueCommandID:
+			vi := getVoiceInstance(vs.ChannelID)
+			if vi == nil {
+				fmt.Println("Voice instance not initiated")
+			}
+			go vi.showQueue()
+
 		default:
 			err := sendUnknownCommand(s, c.Message.ChannelID)
 			if err != nil {
@@ -83,7 +113,7 @@ func CommandHandler(s *discordgo.Session, commandChan <-chan Command) {
 	}
 }
 
-func getVoiceInstancce(voiceChannelID string) *VoiceInstance {
+func getVoiceInstance(voiceChannelID string) *VoiceInstance {
 	voiceInstanceMutex.Lock()
 	vi := voiceInstances[voiceChannelID]
 	voiceInstanceMutex.Unlock()

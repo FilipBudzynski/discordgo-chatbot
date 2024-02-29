@@ -1,7 +1,6 @@
-package song
+package music
 
 import (
-	"discord_go_chat/commands"
 	"reflect"
 	"testing"
 )
@@ -15,10 +14,8 @@ func TestParseJson(t *testing.T) {
 		Duration:  "2:22",
 	}
 
-	output, _ := commands.GetAudioURL(youtubeURL)
-
-	result := &Song{}
-	result.parseJson(output)
+	output, _ := GetSongInfo(youtubeURL)
+	result := NewSong(output)
 
 	reflect.DeepEqual(expected, result)
 }

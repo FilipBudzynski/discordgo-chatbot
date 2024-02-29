@@ -7,7 +7,7 @@ import (
 )
 
 // Action given by the command "!ping", sends back a "Pong!" response
-func handlePingCommand(s *discordgo.Session, channelID string) {
+func HandlePingCommand(s *discordgo.Session, channelID string) {
 	_, err := s.ChannelMessageSend(channelID, "Pong!")
 	if err != nil {
 		fmt.Println("Error sending message to channel:", err)
