@@ -75,11 +75,13 @@ func CommandHandler(s *discordgo.Session, commandChan <-chan Command) {
 			if vi == nil {
 				v := NewVoiceInstance(s, vs, guildID, authorID)
 
+				fmt.Println("Createing new voice instance: ", len(voiceInstances))
+
 				voiceInstanceMutex.Lock()
 				voiceInstances[vs.ChannelID] = v
 				voiceInstanceMutex.Unlock()
 
-				v.init()
+				go v.processQueue()
 				vi = v
 			}
 

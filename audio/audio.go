@@ -210,10 +210,11 @@ func PlayAudioFile(v *discordgo.VoiceConnection, filename string, stop <-chan bo
 	send := make(chan []int16, 2)
 	defer close(send)
 
-	close := make(chan bool)
+	done := make(chan bool)
+
 	go func() {
 		SendPCM(v, send)
-		close <- true
+		close(done) // Close the done channel to signal the goroutine to stop
 	}()
 
 	for {
@@ -238,7 +239,7 @@ func PlayAudioFile(v *discordgo.VoiceConnection, filename string, stop <-chan bo
 			// Send received PCM to the sendPCM channel
 			select {
 			case send <- audiobuf:
-			case <-close:
+			case <-done: // Check if the done channel is closed
 				return
 			}
 		}

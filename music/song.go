@@ -17,8 +17,8 @@ func (s Song) String() string {
 	return fmt.Sprintf("Title: %s\nURL: %s\nDuration: %s\nThumbnail: %s\n", s.Title, s.URL, s.Duration, s.Thumbnail)
 }
 
-func NewSong(songData string) Song {
-	s := Song{}
+func NewSong(songData string) *Song {
+	s := &Song{}
 
 	lines := strings.Split(songData, "\n")
 

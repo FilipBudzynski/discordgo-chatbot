@@ -16,12 +16,11 @@ type VoiceInstance struct {
 	Session         *discordgo.Session
 	VoiceConnection *discordgo.VoiceConnection
 	VoiceState      *discordgo.VoiceState
-	Queue           chan music.Song
+	Queue           chan *music.Song
 	PlaybackState   *audio.PlaybackState
 	TimeoutDuration time.Duration
 	IsPlaying       bool
 	TimeoutSignal   chan bool
-	Stop            chan bool
 	GuildID         string
 	VoiceChannelID  string
 	AuthorID        string
@@ -35,8 +34,10 @@ func NewVoiceInstance(s *discordgo.Session, vs *discordgo.VoiceState, guildID, a
 		VoiceChannelID:  vs.ChannelID,
 		AuthorID:        authorID,
 		TimeoutDuration: timeOut,
-		Queue:           make(chan music.Song),
+		Queue:           make(chan *music.Song),
 	}
+
+	vi.PlaybackState = audio.NewMutexState()
 	return vi
 }
 
@@ -46,7 +47,9 @@ func (v *VoiceInstance) init() {
 
 // Establishes voiceConnection and plays song from provided URL
 func (v *VoiceInstance) play(youtubeURL string) {
-	v.joinVoiceChannel()
+	if v.VoiceConnection == nil {
+		v.joinVoiceChannel()
+	}
 
 	songData, err := music.GetSongInfo(youtubeURL)
 	if err != nil {
@@ -78,21 +81,21 @@ func (v *VoiceInstance) processQueue() {
 			return
 		case song, ok := <-v.Queue:
 			if !ok {
+				fmt.Println("Queue closed, disconnecting...")
+				v.Disconnect()
 				return
 			}
 			fmt.Println("Processing song:", song)
-			if !timer.Stop() {
-				<-timer.C
-			}
-			timer.Reset(v.TimeoutDuration)
-
+			timer.Stop()
 			v.playSong(song)
+			timer.Reset(v.TimeoutDuration)
 		}
 	}
 }
 
 func (v *VoiceInstance) Disconnect() {
 	v.VoiceConnection.Disconnect()
+	v.VoiceConnection.Close()
 
 	voiceInstanceMutex.Lock()
 	defer voiceInstanceMutex.Unlock()
@@ -100,17 +103,15 @@ func (v *VoiceInstance) Disconnect() {
 	delete(voiceInstances, v.VoiceConnection.ChannelID)
 }
 
-func (v *VoiceInstance) playSong(s music.Song) {
+func (v *VoiceInstance) playSong(s *music.Song) {
 	v.IsPlaying = true
 
-	v.PlaybackState = audio.NewMutexState()
-	audio.PlayAudioFile(v.VoiceConnection, s.URL, v.Stop, v.PlaybackState)
+	done := make(chan bool)
+	defer close(done)
+
+	audio.PlayAudioFile(v.VoiceConnection, s.URL, done, v.PlaybackState)
 
 	v.IsPlaying = false
-}
-
-func (v *VoiceInstance) StopPlaying() {
-	v.Stop <- true
 }
 
 func (v *VoiceInstance) Pause() {
