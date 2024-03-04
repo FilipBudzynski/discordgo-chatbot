@@ -1,6 +1,8 @@
 package music
 
 import (
+	"fmt"
+	"os"
 	"reflect"
 	"testing"
 )
@@ -12,10 +14,40 @@ func TestParseJson(t *testing.T) {
 		Title:     "Palion - Zielone 2 Nightcore",
 		Thumbnail: "https://i.ytimg.com/vi/QXV8iBwvZH4/maxresdefault.jpg",
 		Duration:  "2:22",
+		Path:      "",
 	}
 
-	output, _ := GetSongInfo(youtubeURL)
-	result := NewSong(output)
+	output, _ := GetSongData(youtubeURL)
+	result := NewSong(output, "")
 
 	reflect.DeepEqual(expected, result)
+}
+
+func TestSaveAudio(t *testing.T) {
+	currentDir, err := os.Getwd()
+	if err != nil {
+		fmt.Println("Error getting current directory:", err)
+		return
+	}
+	youtubeURL := "https://www.youtube.com/watch?v=QXV8iBwvZH4&ab_channel=Kozko"
+	audioPath := currentDir + "/" + "QXV8iBwvZH4&ab" + ".mp3"
+
+	output, _ := GetSongData(youtubeURL)
+	downloadedAudioPath, err := DownloadAudio(youtubeURL)
+	if err != nil {
+		t.Errorf("Error while saving audio: %v", err)
+	}
+
+	_ = NewSong(output, downloadedAudioPath)
+
+	// Check if the file is downloaded
+	if _, err := os.Stat(audioPath); os.IsNotExist(err) {
+		t.Errorf("Downloaded file does not exist: %v", audioPath)
+	}
+
+	// Clean up: delete the downloaded file
+	err = os.Remove(audioPath)
+	if err != nil {
+		t.Errorf("Error while cleaning up: %v", err)
+	}
 }

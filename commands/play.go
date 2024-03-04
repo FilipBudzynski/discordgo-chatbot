@@ -4,6 +4,8 @@ import (
 	"discord_go_chat/audio"
 	"discord_go_chat/music"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -19,21 +21,24 @@ type VoiceInstance struct {
 	PlaybackState   *audio.PlaybackState
 	GuildID         string
 	VoiceChannelID  string
+	ChannelID       string
 	AuthorID        string
 	NewSongSignal   chan struct{}
-	TimeoutSignal   chan bool
+	Stop            chan bool
 	Queue           []music.Song
 	TimeoutDuration time.Duration
 }
 
-func NewVoiceInstance(s *discordgo.Session, vs *discordgo.VoiceState, guildID, authorID string) *VoiceInstance {
+func NewVoiceInstance(s *discordgo.Session, vs *discordgo.VoiceState, guildID, authorID, channelID string) *VoiceInstance {
 	vi := &VoiceInstance{
 		Session:         s,
 		VoiceState:      vs,
 		GuildID:         guildID,
-		VoiceChannelID:  vs.ChannelID,
+		ChannelID:       channelID,
 		AuthorID:        authorID,
+		VoiceChannelID:  vs.ChannelID,
 		TimeoutDuration: timeOut,
+		Stop:            make(chan bool),
 		NewSongSignal:   make(chan struct{}),
 		Queue:           make([]music.Song, 0),
 	}
@@ -52,12 +57,17 @@ func (v *VoiceInstance) play(youtubeURL string) {
 		v.joinVoiceChannel()
 	}
 
-	songData, err := music.GetSongInfo(youtubeURL)
+	audioPath, err := music.DownloadAudio(youtubeURL)
 	if err != nil {
 		fmt.Println("Error with getting info from yt-dlp: ", err)
 	}
 
-	v.Queue = append(v.Queue, music.NewSong(songData))
+	songData, err := music.GetSongData(youtubeURL)
+	if err != nil {
+		fmt.Println("Error with getting info from yt-dlp: ", err)
+	}
+
+	v.Queue = append(v.Queue, music.NewSong(songData, audioPath))
 	v.NewSongSignal <- struct{}{}
 }
 
@@ -84,18 +94,24 @@ func (v *VoiceInstance) processQueue() {
 			timer.Stop()
 
 			song := &v.Queue[0]
+
+			audio.PlayAudioFile(v.VoiceConnection, song.Path, v.Stop, v.PlaybackState)
+
+			// remove finished audio
+			err := os.Remove(song.Path)
+			if err != nil {
+				fmt.Printf("Error while cleaning up: %v", err)
+			}
+
 			v.Queue = v.Queue[1:]
 
-			v.playSong(song)
 			timer.Reset(v.TimeoutDuration)
 		}
 	}
 }
 
-func (v *VoiceInstance) playSong(s *music.Song) {
-	done := make(chan bool)
-	defer close(done)
-	audio.PlayAudioFile(v.VoiceConnection, s.URL, done, v.PlaybackState)
+func (v *VoiceInstance) SkipSong() {
+	v.Stop <- true
 }
 
 func (v *VoiceInstance) Pause() {
@@ -108,17 +124,20 @@ func (v *VoiceInstance) Resume() {
 	v.PlaybackState.Resume()
 }
 
-func (v *VoiceInstance) showQueue() {
-	fmt.Println("Current Queue:")
-
+func (v *VoiceInstance) printQueue() string {
 	if len(v.Queue) == 0 {
 		fmt.Println("empty")
-		return
+		return "Queue is empty, add music to queue with !play"
 	}
 
+	var message strings.Builder
+	message.WriteString(fmt.Sprintln("Current Queue:"))
+
 	for i, s := range v.Queue {
-		fmt.Printf("%d: %q\n", i+1, s.Title)
+		message.WriteString(fmt.Sprintf("%d: %q\n", i+1, s.Title))
 	}
+
+	return message.String()
 }
 
 func (v *VoiceInstance) Disconnect() {

@@ -214,7 +214,8 @@ func PlayAudioFile(v *discordgo.VoiceConnection, filename string, stop <-chan bo
 
 	go func() {
 		SendPCM(v, send)
-		close(done) // Close the done channel to signal the goroutine to stop
+		done <- true
+		close(done)
 	}()
 
 	for {
@@ -229,9 +230,11 @@ func PlayAudioFile(v *discordgo.VoiceConnection, filename string, stop <-chan bo
 			audiobuf := make([]int16, frameSize*channels)
 			err = binary.Read(ffmpegbuf, binary.LittleEndian, &audiobuf)
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
+				fmt.Println("================read the file already==================", err)
 				return
 			}
-			if err != nil {
+
+			if err != nil && (err != io.EOF || err == io.ErrUnexpectedEOF) {
 				OnError("error reading from ffmpeg stdout", err)
 				return
 			}
