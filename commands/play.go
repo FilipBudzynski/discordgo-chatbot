@@ -11,9 +11,8 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-var timeOut = 1 * time.Minute
+var TIMEOUT = 1 * time.Minute
 
-// Type used for creating a voice instance that is responsible for playing sounds/songs on the channel
 type VoiceInstance struct {
 	Session         *discordgo.Session
 	VoiceConnection *discordgo.VoiceConnection
@@ -37,22 +36,18 @@ func NewVoiceInstance(s *discordgo.Session, vs *discordgo.VoiceState, guildID, a
 		ChannelID:       channelID,
 		AuthorID:        authorID,
 		VoiceChannelID:  vs.ChannelID,
-		TimeoutDuration: timeOut,
+		TimeoutDuration: TIMEOUT,
 		Stop:            make(chan bool),
 		NewSongSignal:   make(chan struct{}),
 		Queue:           make([]music.Song, 0),
 	}
 
-	vi.PlaybackState = audio.NewMutexState()
+	vi.PlaybackState = audio.NewPlaybackState()
 	return vi
 }
 
-func (v *VoiceInstance) init() {
-	go v.processQueue()
-}
-
 func (v *VoiceInstance) play(youtubeURL string) {
-	// connect if not yet connected to the channel
+	// connect to the voic channel if not connected yet
 	if v.VoiceConnection == nil {
 		v.joinVoiceChannel()
 	}
@@ -92,19 +87,14 @@ func (v *VoiceInstance) processQueue() {
 			return
 		case <-v.NewSongSignal:
 			timer.Stop()
-
 			song := &v.Queue[0]
-
 			audio.PlayAudioFile(v.VoiceConnection, song.Path, v.Stop, v.PlaybackState)
-
 			// remove finished audio
 			err := os.Remove(song.Path)
 			if err != nil {
 				fmt.Printf("Error while cleaning up: %v", err)
 			}
-
 			v.Queue = v.Queue[1:]
-
 			timer.Reset(v.TimeoutDuration)
 		}
 	}
@@ -115,16 +105,16 @@ func (v *VoiceInstance) SkipSong() {
 }
 
 func (v *VoiceInstance) Pause() {
-	v.VoiceConnection.Speaking(false)
+	_ = v.VoiceConnection.Speaking(false)
 	v.PlaybackState.Pause()
 }
 
 func (v *VoiceInstance) Resume() {
-	v.VoiceConnection.Speaking(true)
+	_ = v.VoiceConnection.Speaking(true)
 	v.PlaybackState.Resume()
 }
 
-func (v *VoiceInstance) printQueue() string {
+func (v *VoiceInstance) showQueue() string {
 	if len(v.Queue) == 0 {
 		fmt.Println("empty")
 		return "Queue is empty, add music to queue with !play"

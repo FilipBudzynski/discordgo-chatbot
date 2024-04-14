@@ -28,7 +28,7 @@ type PlaybackState struct {
 	Paused bool
 }
 
-func NewMutexState() *PlaybackState {
+func NewPlaybackState() *PlaybackState {
 	ps := &PlaybackState{}
 	ps.cond = sync.NewCond(&ps.mu)
 	return ps
@@ -88,7 +88,6 @@ func SendPCM(v *discordgo.VoiceConnection, pcm <-chan []int16) {
 	var err error
 
 	opusEncoder, err = gopus.NewEncoder(frameRate, channels, gopus.Audio)
-
 	if err != nil {
 		OnError("NewEncoder Error", err)
 		return

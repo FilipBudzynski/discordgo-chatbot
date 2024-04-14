@@ -116,7 +116,7 @@ func CommandHandler(s *discordgo.Session, commandChan <-chan Command) {
 				}
 				return
 			}
-			message := vi.printQueue()
+			message := vi.showQueue()
 			err := SendMessage(vi.Session, vi.ChannelID, message)
 			if err != nil {
 				fmt.Println("Couldn't send a message")
@@ -131,7 +131,6 @@ func CommandHandler(s *discordgo.Session, commandChan <-chan Command) {
 					fmt.Println("Couldn't send a message")
 				}
 				vi.SkipSong()
-				return
 			}()
 
 		default:
