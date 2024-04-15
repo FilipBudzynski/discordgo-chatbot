@@ -2,6 +2,12 @@
 
 A personal project made for the purpose of using YouTube API to play songs directly from the links
 
+   [Motivation](##toc_1)
+   [Purpose](##toc_2)
+   [How to run](##toc_3)
+   [How to use](##toc_4)
+   [Thanks and reagrds](##toc_5)
+
 ---
 ## Motivation
 
@@ -14,11 +20,27 @@ This is not a deployed discord-bot due to the fact that bots which are using YT 
 This bot is ment to be used privatly only. You can download the code and run the executable or use the docker image provided. # not implemented yet
 
 ---
-## Usage
+## How to run
 
-Discord token is read from the .env file via godotenv by the name of DISCORD_TOKEN.
-After starting the program you can add it to your discord server via this step by step guide: https://discord.com/developers/docs/quick-start/getting-started
+This project uses yt-dlp and opus so make sure you have them installed.
+* yt-dlp: https://github.com/yt-dlp/yt-dlp
+* opus:  ```sudo apt-get install -y libopus-dev```
 
+Discord token is read from the .env file with godotenv by the key of `DISCORD_TOKEN`.
+* First create a discord bot following this step by step guide: https://discord.com/developers/docs/quick-start/getting-started
+* Compile the program from the root repository with ```go build -o discordgo-music-bot .```
+* Run the executable ```./discordgo-music-bot``` and play some music!
+
+*(I'm currentlly working on the dockerfile that will let you quickly setup the bot to play your favourite songs.)*
+
+## How to use
+
+* `!play <yt-link>` plays the song you want
+* `!queue` shows the current queue
+* `!skip` skips the current played song
+* `!ping` will sand you back a pong!
+
+## Special thanks
 ---
 Part of the code responsible for streaming the audio to the voice channel of discord was based on and slightly tweeked on the dca code found here: https://github.com/bwmarrin/dca.
 Therefore special thanks to the bwmarrin for creating the discordgo package and providing good example of the dca streaming.

@@ -2,6 +2,7 @@ package commands
 
 import (
 	"fmt"
+	"regexp"
 	"sync"
 
 	"github.com/bwmarrin/discordgo"
@@ -29,8 +30,10 @@ type Command struct {
 
 // Store voice instances here
 var (
-	voiceInstances     = make(map[string]*VoiceInstance)
-	voiceInstanceMutex sync.Mutex
+	voiceInstances             = make(map[string]*VoiceInstance)
+	voiceInstanceMutex         sync.Mutex
+	notValidYoutubeLinkMessage = "Not valid youtube link provided."
+	noLinkSpecified            = "None valid youtube link specified."
 )
 
 func ParseCommand(content string) CommandID {
@@ -75,13 +78,30 @@ func CommandHandler(s *discordgo.Session, commandChan <-chan Command) {
 			}(c.Message.ChannelID)
 
 		case PlayCommandID:
+			fmt.Println("ARGS: ", c.Args)
+			if len(c.Args) < 2 {
+				fmt.Println(noLinkSpecified)
+				err := SendMessage(s, channelID, noLinkSpecified)
+				if err != nil {
+					fmt.Println(err)
+				}
+				break
+			}
+
 			ytLink := c.Args[1]
+			if ok := isValidYouTubeLink(ytLink); !ok {
+				fmt.Println(notValidYoutubeLinkMessage)
+				err := SendMessage(s, channelID, notValidYoutubeLinkMessage)
+				if err != nil {
+					fmt.Println(err)
+				}
+				break
+			}
+
 			vi := getVoiceInstance(vs.ChannelID)
 			if vi == nil {
 				v := NewVoiceInstance(s, vs, guildID, authorID, channelID)
-
-				fmt.Println("Createing new voice instance: ", len(voiceInstances))
-
+				fmt.Println("Createing new voice instance.")
 				voiceInstanceMutex.Lock()
 				voiceInstances[vs.ChannelID] = v
 				voiceInstanceMutex.Unlock()
@@ -147,4 +167,11 @@ func getVoiceInstance(voiceChannelID string) *VoiceInstance {
 	vi := voiceInstances[voiceChannelID]
 	voiceInstanceMutex.Unlock()
 	return vi
+}
+
+func isValidYouTubeLink(link string) bool {
+	pattern := `^(http(s)?:\/\/)?((w){3}.)?youtu(be|.be)?(\.com)?\/.+`
+	re := regexp.MustCompile(pattern)
+
+	return re.MatchString(link)
 }

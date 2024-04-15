@@ -229,7 +229,6 @@ func PlayAudioFile(v *discordgo.VoiceConnection, filename string, stop <-chan bo
 			audiobuf := make([]int16, frameSize*channels)
 			err = binary.Read(ffmpegbuf, binary.LittleEndian, &audiobuf)
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				fmt.Println("================read the file already==================", err)
 				return
 			}
 

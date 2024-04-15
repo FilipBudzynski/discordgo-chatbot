@@ -1,7 +1,7 @@
 package main
 
 import (
-	"discord_go_chat/commands"
+	"discord_go_chat/pkg/commands"
 	"flag"
 	"fmt"
 	"os"
@@ -60,7 +60,7 @@ func main() {
 	<-sc
 }
 
-// Checks whether the written message is a command and parses it
+// handleMessage checks whether the written message is a command and parses it
 // in order to create a Command struct which will be send to
 // command channel to invoke actions
 func handleMessage(s *discordgo.Session, m *discordgo.MessageCreate) {

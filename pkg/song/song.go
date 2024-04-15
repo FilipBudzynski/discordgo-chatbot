@@ -19,10 +19,14 @@ func (s Song) String() string {
 	return fmt.Sprintf("Title: %s\nURL: %s\nDuration: %s\nThumbnail: %s\nPath: %s\n", s.Title, s.URL, s.Duration, s.Thumbnail, s.Path)
 }
 
-func NewSong(songData, audioPath string) Song {
-	s := Song{}
+func NewSong(songData, audioPath string) (*Song, error) {
+	s := &Song{}
 
 	lines := strings.Split(songData, "\n")
+	if len(lines) < 4 {
+		return nil, fmt.Errorf("invalid song data length: %v", lines)
+	}
+	fmt.Println(songData)
 
 	s.Title = lines[0]
 	s.URL = lines[1]
@@ -30,7 +34,7 @@ func NewSong(songData, audioPath string) Song {
 	s.Duration = lines[3]
 	s.Path = audioPath
 
-	return s
+	return s, nil
 }
 
 func GetSongData(videoURL string) (string, error) {

@@ -1,8 +1,8 @@
 package commands
 
 import (
-	"discord_go_chat/audio"
-	"discord_go_chat/music"
+	audio "discord_go_chat/internal"
+	music "discord_go_chat/pkg/song"
 	"fmt"
 	"os"
 	"strings"
@@ -24,7 +24,7 @@ type VoiceInstance struct {
 	AuthorID        string
 	NewSongSignal   chan struct{}
 	Stop            chan bool
-	Queue           []music.Song
+	Queue           []*music.Song
 	TimeoutDuration time.Duration
 }
 
@@ -39,7 +39,7 @@ func NewVoiceInstance(s *discordgo.Session, vs *discordgo.VoiceState, guildID, a
 		TimeoutDuration: TIMEOUT,
 		Stop:            make(chan bool),
 		NewSongSignal:   make(chan struct{}),
-		Queue:           make([]music.Song, 0),
+		Queue:           make([]*music.Song, 0),
 	}
 
 	vi.PlaybackState = audio.NewPlaybackState()
@@ -62,7 +62,13 @@ func (v *VoiceInstance) play(youtubeURL string) {
 		fmt.Println("Error with getting info from yt-dlp: ", err)
 	}
 
-	v.Queue = append(v.Queue, music.NewSong(songData, audioPath))
+	song, err := music.NewSong(songData, audioPath)
+	if err != nil {
+		fmt.Println("error while createing a new song instance: ", err)
+		return
+	}
+
+	v.Queue = append(v.Queue, song)
 	v.NewSongSignal <- struct{}{}
 }
 
@@ -87,7 +93,7 @@ func (v *VoiceInstance) processQueue() {
 			return
 		case <-v.NewSongSignal:
 			timer.Stop()
-			song := &v.Queue[0]
+			song := v.Queue[0]
 			audio.PlayAudioFile(v.VoiceConnection, song.Path, v.Stop, v.PlaybackState)
 			// remove finished audio
 			err := os.Remove(song.Path)

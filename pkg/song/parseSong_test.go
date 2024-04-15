@@ -18,7 +18,10 @@ func TestParseJson(t *testing.T) {
 	}
 
 	output, _ := GetSongData(youtubeURL)
-	result := NewSong(output, "")
+	result, err := NewSong(output, "")
+	if err != nil {
+		t.Error("error with the Song struct: ", err)
+	}
 
 	reflect.DeepEqual(expected, result)
 }
@@ -35,14 +38,17 @@ func TestSaveAudio(t *testing.T) {
 	output, _ := GetSongData(youtubeURL)
 	downloadedAudioPath, err := DownloadAudio(youtubeURL)
 	if err != nil {
-		t.Errorf("Error while saving audio: %v", err)
+		t.Errorf("error while saving audio: %v", err)
 	}
 
-	_ = NewSong(output, downloadedAudioPath)
+	_, err = NewSong(output, downloadedAudioPath)
+	if err != nil {
+		t.Error("error with the Song struct: ", err)
+	}
 
 	// Check if the file is downloaded
 	if _, err := os.Stat(audioPath); os.IsNotExist(err) {
-		t.Errorf("Downloaded file does not exist: %v", audioPath)
+		t.Errorf("downloaded file does not exist: %v", audioPath)
 	}
 
 	// Clean up: delete the downloaded file
