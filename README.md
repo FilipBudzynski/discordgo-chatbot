@@ -2,11 +2,11 @@
 
 A personal project made for the purpose of using YouTube API to play songs directly from the links
 
-   [Motivation](##toc_1)
-   [Purpose](##toc_2)
-   [How to run](##toc_3)
-   [How to use](##toc_4)
-   [Thanks and reagrds](##toc_5)
+[Motivation](https://github.com/FilipBudzynski/discordgo-chatbot?tab=readme-ov-file#motivation)  
+[Purpose](https://github.com/FilipBudzynski/discordgo-chatbot?tab=readme-ov-file#purpose)  
+[How to run](https://github.com/FilipBudzynski/discordgo-chatbot?tab=readme-ov-file#how-to-run)  
+[How to use](https://github.com/FilipBudzynski/discordgo-chatbot?tab=readme-ov-file#how-to-use)  
+[Thanks and reagrds](https://github.com/FilipBudzynski/discordgo-chatbot?tab=readme-ov-file#special-thanks)  
 
 ---
 ## Motivation
